@@ -13,33 +13,44 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4}
 main{max-width:720px;margin:0 auto;padding:16px}
-h1{font-size:1.35rem;margin:4px 0 4px}
+h1{font-size:1.35rem;margin:4px 0}
 p.s{color:var(--mu);margin:0 0 14px;font-size:.92rem}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:14px}
-button,label.btn{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:10px 14px;border-radius:10px;cursor:pointer;display:inline-block}
+button,label.btn{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 13px;border-radius:10px;cursor:pointer;display:inline-block}
 button.p,label.p{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600}
-button:disabled{opacity:.45;cursor:default}
+button:disabled{opacity:.4;cursor:default}
 input[type=file]{display:none}
-.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
 .ctl{display:flex;flex-direction:column;gap:4px;flex:1 1 130px;font-size:.85rem;color:var(--mu)}
 .ctl input[type=range],.ctl select{width:100%;font:inherit;color:var(--tx)}
 .ctl select{padding:8px;border-radius:8px;border:1px solid var(--bd);background:var(--card)}
-#out{width:100%;height:auto;display:block;border-radius:8px;border:1px solid var(--bd)}
-#empty{color:var(--mu);text-align:center;padding:28px 8px}
-.note{font-size:.82rem;color:var(--mu);margin-top:8px}
+#wrap{position:relative;line-height:0}
+#out{width:100%;height:auto;display:block;border-radius:6px;border:1px solid var(--bd);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.ov{position:absolute;pointer-events:none;display:none;border-radius:4px}
+#sel{outline:3px solid var(--ac);outline-offset:-3px}
+#tgt{background:rgba(251,146,60,.35);outline:3px dashed var(--ac);outline-offset:-3px}
+#empty{color:var(--mu);text-align:center;padding:28px 8px;line-height:1.4}
+.note{font-size:.82rem;color:var(--mu);margin-top:10px;line-height:1.4}
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
 <main>
 <h1>Creador de collages</h1>
-<p class="s">Sube tus fotos de cualquier tamaño y se acomodan solas en un rectángulo, sin recortarlas. Todo ocurre en tu dispositivo.</p>
+<p class="s">Sube fotos de cualquier tamaño y se acomodan solas en un rectángulo, sin recortarlas. Todo ocurre en tu dispositivo.</p>
 
 <div class="card">
-<label class="btn p" for="f">Elegir fotos</label>
+<label class="btn p" for="f">Agregar fotos</label>
 <input id="f" type="file" accept="image/*" multiple>
 <div class="row">
-<div class="ctl">Filas
+<div class="ctl">Estilo
+<select id="mode"><option value="mosaic">Mosaico irregular</option><option value="rows">Filas ordenadas</option></select></div>
+<div class="ctl" id="shapeBox">Forma final
+<select id="shape"><option value="0.75">Vertical</option><option value="1">Cuadrada</option><option value="1.4">Horizontal</option><option value="0">Libre</option></select></div>
+<div class="ctl" id="rowsBox" hidden>Filas
 <select id="rows"><option value="0">Automático</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+</div>
+<div class="row">
 <div class="ctl">Separación: <span id="gv">16</span> px
 <input id="gap" type="range" min="0" max="60" value="16"></div>
 <div class="ctl">Color del borde
@@ -52,88 +63,177 @@ input[type=file]{display:none}
 </div>
 
 <div class="card">
-<div id="empty">Aún no hay fotos. Toca “Elegir fotos” y selecciona varias a la vez.</div>
-<canvas id="out" hidden></canvas>
-<div class="note" id="note" hidden>Si no se descarga, mantén presionada la imagen y elige “Guardar”.</div>
+<div id="empty">Aún no hay fotos. Toca “Agregar fotos” y selecciona varias a la vez.</div>
+<div id="wrap" hidden>
+<canvas id="out"></canvas>
+<div class="ov" id="sel"></div><div class="ov" id="tgt"></div>
+</div>
+<div id="tools" hidden>
+<div class="row">
+<button id="rl" disabled>⟲ Girar</button>
+<button id="rr" disabled>⟳ Girar</button>
+<button id="big" disabled>⤢ Hacer grande</button>
+<button id="del" disabled>🗑 Quitar</button>
+</div>
+<div class="note">Toca una foto para seleccionarla. Para cambiarla de lugar, arrástrala sobre otra (en el celular, mantén presionada un instante y luego arrastra). “Mezclar” genera una distribución nueva.</div>
+</div>
 </div>
 </main>
 <script>
 const $=id=>document.getElementById(id);
-let imgs=[];
-const W=2000;
+const c=$('out'),ctx=c.getContext('2d'),W=2000;
+let items=[],tree=null,rects=[],sel=-1,drag=null;
 
-$('f').addEventListener('change',async e=>{
-  const files=[...e.target.files];
-  imgs=await Promise.all(files.map(f=>new Promise(res=>{
-    const im=new Image();const u=URL.createObjectURL(f);
-    im.onload=()=>res(im);im.onerror=()=>res(null);im.src=u;
-  })));
-  imgs=imgs.filter(Boolean);
-  render();
-});
-['rows','gap','col'].forEach(id=>$(id).addEventListener('input',()=>{$('gv').textContent=$('gap').value;render();}));
-$('shuf').onclick=()=>{
-  for(let i=imgs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[imgs[i],imgs[j]]=[imgs[j],imgs[i]];}
-  render();
-};
-
-// reparte las fotos en filas consecutivas con aspectos similares
-function partition(asp,r){
-  const n=asp.length,tot=asp.reduce((a,b)=>a+b,0),tgt=tot/r;
-  const pre=[0];asp.forEach(a=>pre.push(pre[pre.length-1]+a));
-  const cost=(i,j)=>Math.pow(pre[j]-pre[i]-tgt,2);
-  const dp=Array.from({length:r+1},()=>Array(n+1).fill(Infinity));
-  const cut=Array.from({length:r+1},()=>Array(n+1).fill(0));
+const eff=it=>it.rot%180?it.h/it.w:it.w/it.h;
+function asp(n){
+  if(n.s!==undefined)return eff(items[n.s]);
+  const a=n.c.map(asp);
+  return n.t==='h'?a.reduce((x,y)=>x+y,0):1/a.reduce((x,y)=>x+1/y,0);
+}
+function rnd(ids){
+  if(ids.length===1)return{s:ids[0]};
+  const k=1+Math.floor(Math.random()*(ids.length-1));
+  return{t:Math.random()<.5?'h':'v',c:[rnd(ids.slice(0,k)),rnd(ids.slice(k))]};
+}
+function partition(a,r){
+  const n=a.length,tgt=a.reduce((x,y)=>x+y,0)/r,pre=[0];
+  a.forEach(v=>pre.push(pre[pre.length-1]+v));
+  const dp=Array.from({length:r+1},()=>Array(n+1).fill(Infinity)),cut=Array.from({length:r+1},()=>Array(n+1).fill(0));
   dp[0][0]=0;
   for(let k=1;k<=r;k++)for(let j=k;j<=n;j++)for(let i=k-1;i<j;i++){
-    const c=dp[k-1][i]+cost(i,j);
-    if(c<dp[k][j]){dp[k][j]=c;cut[k][j]=i;}
+    const v=dp[k-1][i]+Math.pow(pre[j]-pre[i]-tgt,2);
+    if(v<dp[k][j]){dp[k][j]=v;cut[k][j]=i;}
   }
-  const groups=[];let j=n;
-  for(let k=r;k>=1;k--){const i=cut[k][j];groups.unshift([i,j]);j=i;}
-  return groups;
+  const g=[];let j=n;
+  for(let k=r;k>=1;k--){const i=cut[k][j];g.unshift([i,j]);j=i;}
+  return g;
 }
-
-function render(){
-  const n=imgs.length;
-  $('empty').hidden=n>0;$('out').hidden=n===0;$('note').hidden=n===0;
-  $('shuf').disabled=n<2;$('dl').disabled=n===0;
-  if(!n)return;
-  const g=+$('gap').value;
-  let r=+$('rows').value;
-  if(!r)r=Math.max(1,Math.min(n,Math.round(Math.sqrt(n*0.9))));
-  r=Math.min(r,n);
-  const asp=imgs.map(i=>i.naturalWidth/i.naturalHeight);
-  const groups=partition(asp,r);
-  const layout=groups.map(([a,b])=>{
-    const sum=asp.slice(a,b).reduce((x,y)=>x+y,0);
-    const h=(W-g*(b-a-1))/sum;
-    return {a,b,h};
-  });
-  const H=Math.round(layout.reduce((s,l)=>s+l.h,0)+g*(layout.length-1));
-  const c=$('out');c.width=W;c.height=H;
-  const x=c.getContext('2d');
-  x.fillStyle=$('col').value;x.fillRect(0,0,W,H);
-  x.imageSmoothingQuality='high';
-  let y=0;
-  layout.forEach(l=>{
-    let px=0;
-    for(let i=l.a;i<l.b;i++){
-      const w=asp[i]*l.h;
-      x.drawImage(imgs[i],px,y,w,l.h);
-      px+=w+g;
+function build(){
+  const n=items.length;
+  if(!n){tree=null;return;}
+  if(n===1){tree={s:0};return;}
+  if($('mode').value==='rows'){
+    let r=+$('rows').value;
+    if(!r)r=Math.max(1,Math.round(Math.sqrt(n*.9)));
+    r=Math.min(r,n);
+    const rowsN=partition(items.map(eff),r).map(([i,j])=>{
+      const l=[];for(let s=i;s<j;s++)l.push({s});
+      return l.length===1?l[0]:{t:'h',c:l};
+    });
+    tree=rowsN.length===1?rowsN[0]:{t:'v',c:rowsN};
+  }else{
+    const target=+$('shape').value;let best,bs=Infinity;
+    for(let i=0;i<60;i++){
+      const ids=[...Array(n).keys()].sort(()=>Math.random()-.5),t=rnd(ids);
+      const sc=target?Math.abs(Math.log(asp(t)/target)):Math.random();
+      if(sc<bs){bs=sc;best=t;}
     }
-    y+=l.h+g;
-  });
+    tree=best;
+  }
+}
+function place(n,x,y,w,h){
+  if(n.s!==undefined){rects[n.s]={x,y,w,h};return;}
+  const a=n.c.map(asp);
+  if(n.t==='h'){let p=x;n.c.forEach((ch,i)=>{const cw=a[i]*h;place(ch,p,y,cw,h);p+=cw;});}
+  else{let p=y;n.c.forEach((ch,i)=>{const chh=w/a[i];place(ch,x,p,w,chh);p+=chh;});}
+}
+function tile(it,x,y,w,h){
+  const odd=it.rot%180,sw=odd?h:w,sh=odd?w:h,s=Math.max(sw/it.w,sh/it.h),dw=it.w*s,dh=it.h*s;
+  ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+  ctx.translate(x+w/2,y+h/2);ctx.rotate(it.rot*Math.PI/180);
+  ctx.drawImage(it.im,-dw/2,-dh/2,dw,dh);ctx.restore();
+}
+function render(){
+  const n=items.length;
+  $('empty').hidden=n>0;$('wrap').hidden=!n;$('tools').hidden=!n;
+  $('shuf').disabled=n<2;$('dl').disabled=!n;
+  ['rl','rr','del'].forEach(i=>$(i).disabled=sel<0);
+  $('big').disabled=sel<0||n<2;
+  if(!n)return;
+  const g=+$('gap').value,Wi=W-g,Hi=Wi/asp(tree);
+  c.width=W;c.height=Math.round(Hi+g);
+  ctx.fillStyle=$('col').value;ctx.fillRect(0,0,c.width,c.height);
+  ctx.imageSmoothingQuality='high';
+  rects=[];place(tree,g/2,g/2,Wi,Hi);
+  rects.forEach((r,i)=>tile(items[i],r.x+g/2,r.y+g/2,r.w-g,r.h-g));
+  paintOv();
+}
+function box(el,i){
+  if(i<0||!rects[i]){el.style.display='none';return;}
+  const r=rects[i];
+  el.style.display='block';
+  el.style.left=r.x/c.width*100+'%';el.style.top=r.y/c.height*100+'%';
+  el.style.width=r.w/c.width*100+'%';el.style.height=r.h/c.height*100+'%';
+}
+function paintOv(){box($('sel'),sel);box($('tgt'),drag&&drag.on?drag.over:-1);}
+function hit(e){
+  const b=c.getBoundingClientRect(),px=(e.clientX-b.left)*c.width/b.width,py=(e.clientY-b.top)*c.height/b.height;
+  return rects.findIndex(r=>px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h);
 }
 
-$('dl').onclick=async()=>{
-  const c=$('out');
-  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.92));
+c.addEventListener('pointerdown',e=>{
+  const i=hit(e);if(i<0)return;
+  drag={i,x:e.clientX,y:e.clientY,on:false,over:-1,touch:e.pointerType==='touch'};
+  if(drag.touch)drag.t=setTimeout(()=>{if(drag){drag.on=true;navigator.vibrate&&navigator.vibrate(15);}},350);
+});
+c.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  const m=Math.hypot(e.clientX-drag.x,e.clientY-drag.y);
+  if(!drag.on){
+    if(drag.touch){if(m>10){clearTimeout(drag.t);drag=null;}return;}
+    if(m>6)drag.on=true;else return;
+  }
+  drag.over=hit(e);paintOv();
+});
+c.addEventListener('pointerup',()=>{
+  if(!drag)return;
+  clearTimeout(drag.t);const d=drag;drag=null;
+  if(d.on){
+    if(d.over>=0&&d.over!==d.i){[items[d.i],items[d.over]]=[items[d.over],items[d.i]];sel=d.over;}
+  }else sel=sel===d.i?-1:d.i;
+  render();
+});
+c.addEventListener('pointercancel',()=>{if(drag){clearTimeout(drag.t);drag=null;paintOv();}});
+document.addEventListener('touchmove',e=>{if(drag&&drag.on)e.preventDefault();},{passive:false});
+
+$('f').addEventListener('change',async e=>{
+  const list=await Promise.all([...e.target.files].map(f=>new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>res({im,w:im.naturalWidth,h:im.naturalHeight,rot:0});
+    im.onerror=()=>res(null);im.src=URL.createObjectURL(f);
+  })));
+  items.push(...list.filter(Boolean));e.target.value='';
+  sel=-1;build();render();
+});
+const rot=d=>{if(sel<0)return;items[sel].rot=(items[sel].rot+d+360)%360;render();};
+$('rl').onclick=()=>rot(-90);$('rr').onclick=()=>rot(90);
+$('del').onclick=()=>{items.splice(sel,1);sel=-1;build();render();};
+$('big').onclick=()=>{
+  let m=0;rects.forEach((r,i)=>{if(r.w*r.h>rects[m].w*rects[m].h)m=i;});
+  if(m!==sel){[items[sel],items[m]]=[items[m],items[sel]];sel=m;}
+  render();
+};
+$('shuf').onclick=()=>{
+  if($('mode').value==='rows')items.sort(()=>Math.random()-.5);
+  sel=-1;build();render();
+};
+$('mode').oninput=()=>{
+  const r=$('mode').value==='rows';
+  $('rowsBox').hidden=!r;$('shapeBox').hidden=r;sel=-1;build();render();
+};
+['rows','shape'].forEach(id=>$(id).oninput=()=>{sel=-1;build();render();});
+$('gap').oninput=()=>{$('gv').textContent=$('gap').value;render();};
+$('col').oninput=render;
+
+async function saveBlob(blob){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='collage.jpg';
   document.body.appendChild(a);a.click();a.remove();
-  $('note').hidden=false;
+}
+$('dl').onclick=async()=>{
+  sel=-1;render();
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.92));
+  saveBlob(blob);
 };
 </script>
 </body>
