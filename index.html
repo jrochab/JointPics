@@ -59,6 +59,8 @@ input[type=file]{display:none}
 <div class="row">
 <button id="shuf" disabled>🔀 Mezclar</button>
 <button id="dl" class="p" disabled>⬇ Descargar</button>
+<button id="cp" disabled>📋 Copiar PNG</button>
+<span id="msg" class="note" style="margin:0"></span>
 </div>
 </div>
 
@@ -146,7 +148,7 @@ function tile(it,x,y,w,h){
 function render(){
   const n=items.length;
   $('empty').hidden=n>0;$('wrap').hidden=!n;$('tools').hidden=!n;
-  $('shuf').disabled=n<2;$('dl').disabled=!n;
+  $('shuf').disabled=n<2;$('dl').disabled=!n;$('cp').disabled=!n;
   ['rl','rr','del'].forEach(i=>$(i).disabled=sel<0);
   $('big').disabled=sel<0||n<2;
   if(!n)return;
@@ -225,6 +227,15 @@ $('mode').oninput=()=>{
 $('gap').oninput=()=>{$('gv').textContent=$('gap').value;render();};
 $('col').oninput=render;
 
+const say=m=>{$('msg').textContent=m;setTimeout(()=>{$('msg').textContent='';},3500);};
+$('cp').onclick=async()=>{
+  sel=-1;render();
+  try{
+    const p=new Promise(r=>c.toBlob(r,'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({'image/png':p})]);
+    say('✓ Copiado');
+  }catch(e){say('No se pudo copiar. Usa Descargar o mantén presionada la imagen.');}
+};
 async function saveBlob(blob){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='collage.jpg';
