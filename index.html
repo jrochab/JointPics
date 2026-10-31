@@ -60,8 +60,14 @@ input[type=file]{display:none}
 <button id="shuf" disabled>🔀 Mezclar</button>
 <button id="dl" class="p" disabled>⬇ Descargar</button>
 <button id="cp" disabled>📋 Copiar PNG</button>
+<button id="share" disabled>↗ Compartir</button>
 <span id="msg" class="note" style="margin:0"></span>
 </div>
+<div class="ctl" style="margin-top:14px">
+<label for="shareText">Mensaje para compartir</label>
+<textarea id="shareText" rows="3" placeholder="Escriba el mensaje que acompañará al collage" style="width:100%;font:inherit;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx);resize:vertical"></textarea>
+</div>
+<div class="note">Este texto se comparte como mensaje separado. No aparece dentro de la imagen. La aplicación de destino decide cómo mostrarlo.</div>
 </div>
 
 <div class="card">
@@ -148,7 +154,7 @@ function tile(it,x,y,w,h){
 function render(){
   const n=items.length;
   $('empty').hidden=n>0;$('wrap').hidden=!n;$('tools').hidden=!n;
-  $('shuf').disabled=n<2;$('dl').disabled=!n;$('cp').disabled=!n;
+  $('shuf').disabled=n<2;$('dl').disabled=!n;$('cp').disabled=!n;$('share').disabled=!n;
   ['rl','rr','del'].forEach(i=>$(i).disabled=sel<0);
   $('big').disabled=sel<0||n<2;
   if(!n)return;
@@ -246,6 +252,29 @@ $('dl').onclick=async()=>{
   const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.92));
   saveBlob(blob);
 };
+
+$('share').onclick=async()=>{
+  sel=-1;render();
+  const text=$('shareText').value.trim();
+  try{
+    const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('export')),'image/jpeg',0.92));
+    const file=new File([blob],'collage.jpg',{type:'image/jpeg'});
+    const data={files:[file],...(text?{text}: {})};
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share(data);
+      say('Compartido');
+    }else{
+      await saveBlob(blob);
+      if(text){
+        try{await navigator.clipboard.writeText(text);say('Imagen descargada y mensaje copiado para pegar al compartir.');}
+        catch(e){say('Imagen descargada. Copie el mensaje del campo para compartirlo.');}
+      }else say('Imagen descargada. Puede compartirla desde su galería.');
+    }
+  }catch(e){
+    if(e.name!=='AbortError')say('No se pudo compartir. Use Descargar y copie el mensaje por separado.');
+  }
+};
+
 </script>
 </body>
 </html>
